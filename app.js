@@ -769,6 +769,7 @@ function renderDashboard(data) {
   renderDispatchClientCheckboxes(clientList);
   renderManageTab(clientList);
   renderDispatchStateSync(data.dispatchState);
+  populateDispatchModels();
 }
 
 // -----------------------------------------------------------------------------
@@ -1301,6 +1302,30 @@ function renderDispatchClientCheckboxes(clients) {
   container.innerHTML = html;
 }
 
+let isDispatchModelsLoaded = false;
+async function populateDispatchModels() {
+  if (isDispatchModelsLoaded) return;
+  const sel = $('dispatch-model-select');
+  if (!sel) return;
+  try {
+    const data = await apiRequest('/api/chat/models?client=ultra');
+    if (data && Array.isArray(data.modelFamilies) && data.modelFamilies.length > 0) {
+      isDispatchModelsLoaded = true;
+      const curVal = sel.value;
+      let opts = '<option value="auto">⚙️ 跟随各客户端默认 (Auto)</option>';
+      for (const fam of data.modelFamilies) {
+        opts += `<option value="${escapeHtml(fam.family)}">${escapeHtml(fam.family)}</option>`;
+      }
+      sel.innerHTML = opts;
+      if (curVal && Array.from(sel.options).some(o => o.value === curVal)) {
+        sel.value = curVal;
+      }
+    }
+  } catch (e) {
+    console.warn('[app] 加载派发台模型列表失败:', e.message);
+  }
+}
+
 // 智能任务规模评估 (严禁将普通 1. 2. 3. 序号误判为多机大工程！)
 function estimateTaskScale(prompt) {
   if (!prompt || typeof prompt !== 'string') {
@@ -1402,6 +1427,8 @@ async function handleDispatchSubmit() {
   const callbackUltra = Boolean($('dispatch-opt-callback')?.checked);
   const selfTest = Boolean($('dispatch-opt-self-test')?.checked);
   const reviewClient = $('dispatch-opt-peer-review')?.checked ? 'auto' : '';
+  const model = $('dispatch-model-select')?.value || '';
+  const thinkingStrength = $('dispatch-strength-select')?.value || '';
 
   const submitBtn = $('btn-submit-dispatch');
   isDispatching = true;
@@ -1411,7 +1438,19 @@ async function handleDispatchSubmit() {
   try {
     const res = await apiRequest('/api/dispatch', {
       method: 'POST',
-      body: JSON.stringify({ target, prompt, forceNew, smartNew, autoSplit, overdraftProtect, callbackUltra, selfTest, reviewClient })
+      body: JSON.stringify({
+        target,
+        prompt,
+        model: model && model !== 'auto' ? model : '',
+        thinkingStrength: thinkingStrength && thinkingStrength !== 'auto' ? thinkingStrength : '',
+        forceNew,
+        smartNew,
+        autoSplit,
+        overdraftProtect,
+        callbackUltra,
+        selfTest,
+        reviewClient
+      })
     });
 
     // 渲染结果

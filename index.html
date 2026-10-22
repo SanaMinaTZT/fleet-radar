@@ -312,6 +312,30 @@
 
               <!-- 底部输入编辑栏 (Composer Bar) -->
               <div class="chat-composer-bar">
+                <!-- 模型与思考强度快捷工具条 -->
+                <div class="chat-composer-toolbar" id="chat-composer-toolbar">
+                  <div class="chat-toolbar-item">
+                    <label class="chat-toolbar-label" for="chat-model-select">🧠 思考模型:</label>
+                    <select id="chat-model-select" class="chat-toolbar-select" title="选择思考模型">
+                      <option value="auto">⚙️ 跟随客户端默认</option>
+                    </select>
+                  </div>
+                  <div class="chat-toolbar-item">
+                    <label class="chat-toolbar-label" for="chat-strength-select">⚡ 思考强度:</label>
+                    <select id="chat-strength-select" class="chat-toolbar-select" title="选择思考强度 (Effort)">
+                      <option value="auto">🔄 默认强度 (Auto)</option>
+                      <option value="low">🟢 低强度 (Low · 极速省流)</option>
+                      <option value="medium">🟡 中强度 (Medium · 均衡标准)</option>
+                      <option value="high">🔴 高强度 (High · 深度推理)</option>
+                    </select>
+                  </div>
+                  <div class="chat-active-model-pill" id="chat-active-model-pill" title="当前底层实际生效的模型">
+                    <span class="active-sparkle">✨</span>
+                    <span class="active-label">生效:</span>
+                    <strong class="active-model-text" id="chat-active-model-text">正在检测...</strong>
+                  </div>
+                </div>
+
                 <div class="composer-inner">
                   <textarea
                     id="chat-composer-input"
@@ -540,6 +564,39 @@
             <div class="manual-clients-selector" id="manual-clients-box" style="display: none;">
               <div class="clients-checkbox-grid" id="dispatch-checkbox-grid">
                 <!-- 动态渲染客户端复选框 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 模型与思考强度配置区 (Model & Thinking Effort Selection) -->
+          <div class="form-section dispatch-models-section">
+            <div class="form-grid-2col">
+              <div class="form-group">
+                <label class="form-label" for="dispatch-model-select">
+                  <span>🧠 指定思考模型 (Model)</span>
+                  <span class="label-tip">(默认跟随各节点配置或指定统一模型)</span>
+                </label>
+                <select id="dispatch-model-select" class="form-select">
+                  <option value="auto">⚙️ 跟随各客户端默认 (Auto)</option>
+                  <option value="Gemini 4 Argon">Gemini 4 Argon</option>
+                  <option value="Gemini 3.8 Flash">Gemini 3.8 Flash</option>
+                  <option value="Claude Sonnet 5.5">Claude Sonnet 5.5 / 4.6</option>
+                  <option value="Claude Opus 5.5">Claude Opus 5.5 / 4.6</option>
+                  <option value="GPT-OSS 120B">GPT-OSS 120B</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="dispatch-strength-select">
+                  <span>⚡ 指定思考强度 (Thinking Strength)</span>
+                  <span class="label-tip">(自动适配低/中/高强度)</span>
+                </label>
+                <select id="dispatch-strength-select" class="form-select">
+                  <option value="auto">🔄 默认强度 (Auto)</option>
+                  <option value="low">🟢 低强度 (Low · 极速省流)</option>
+                  <option value="medium">🟡 中强度 (Medium · 均衡标准)</option>
+                  <option value="high">🔴 高强度 (High · 深度推理)</option>
+                </select>
               </div>
             </div>
           </div>

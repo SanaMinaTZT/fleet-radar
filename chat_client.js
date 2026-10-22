@@ -12,6 +12,7 @@
   let isChatSending = false;
   let isChatInitialized = false;
   let chatSessionsCache = [];
+  const clientModelsMap = new Map();
 
   const $ = (id) => document.getElementById(id);
 
@@ -93,6 +94,107 @@
     console.log('[Chat Toast]', msg);
   }
 
+  async function loadClientModels(clientId) {
+    const modelSelect = $('chat-model-select');
+    const strengthSelect = $('chat-strength-select');
+    if (!modelSelect || !strengthSelect) return;
+
+    const apiRequest = getApiRequest();
+    let data = clientModelsMap.get(clientId);
+
+    if (!data) {
+      try {
+        data = await apiRequest(`/api/chat/models?client=${clientId}`);
+        if (data && Array.isArray(data.modelFamilies)) {
+          clientModelsMap.set(clientId, data);
+        }
+      } catch (e) {
+        console.warn('[chat_client] 获取模型列表失败:', e.message);
+      }
+    }
+
+    if (!data || !Array.isArray(data.modelFamilies)) {
+      data = {
+        client: clientId,
+        currentDefaultFamily: clientId === 'ultra' ? 'Gemini 4 Argon' : 'Gemini 3.8 Flash',
+        currentDefaultStrength: clientId === 'ultra' ? 'medium' : 'high',
+        modelFamilies: [
+          { family: 'Gemini 4 Argon', variants: { default: 'MODEL_PLACEHOLDER_M418', low: 'MODEL_PLACEHOLDER_M419', medium: 'MODEL_PLACEHOLDER_M418', high: 'MODEL_PLACEHOLDER_M417' } },
+          { family: 'Gemini 3.8 Flash', variants: { default: 'MODEL_PLACEHOLDER_M318', low: 'MODEL_PLACEHOLDER_M320', medium: 'MODEL_PLACEHOLDER_M319', high: 'MODEL_PLACEHOLDER_M318' } }
+        ]
+      };
+    }
+
+    // 填充模型下拉选项
+    const defaultFamilyName = data.currentDefaultFamily || '客户端默认';
+    const savedModel = localStorage.getItem(`antigravity_radar_model_${clientId}`);
+    const savedStrength = localStorage.getItem(`antigravity_radar_strength_${clientId}`);
+
+    let modelOptions = `<option value="auto">⚙️ 跟随客户端默认 (${escapeHtml(defaultFamilyName)})</option>`;
+    for (const fam of data.modelFamilies) {
+      modelOptions += `<option value="${escapeHtml(fam.family)}">${escapeHtml(fam.family)}</option>`;
+    }
+    modelSelect.innerHTML = modelOptions;
+
+    if (savedModel && Array.from(modelSelect.options).some(o => o.value === savedModel)) {
+      modelSelect.value = savedModel;
+    } else {
+      modelSelect.value = 'auto';
+    }
+
+    if (savedStrength && Array.from(strengthSelect.options).some(o => o.value === savedStrength)) {
+      strengthSelect.value = savedStrength;
+    } else {
+      strengthSelect.value = 'auto';
+    }
+
+    updateActiveModelIndicator();
+  }
+
+  function updateActiveModelIndicator() {
+    const modelSelect = $('chat-model-select');
+    const strengthSelect = $('chat-strength-select');
+    const activeTextEl = $('chat-active-model-text');
+    if (!modelSelect || !strengthSelect || !activeTextEl) return;
+
+    const selModel = modelSelect.value || 'auto';
+    const selStrength = strengthSelect.value || 'auto';
+    const data = clientModelsMap.get(activeChatClient);
+
+    // 保存偏好到 localStorage
+    try {
+      localStorage.setItem(`antigravity_radar_model_${activeChatClient}`, selModel);
+      localStorage.setItem(`antigravity_radar_strength_${activeChatClient}`, selStrength);
+    } catch {}
+
+    const targetFamilyName = (selModel === 'auto') ? (data?.currentDefaultFamily || 'Gemini 3.8 Flash') : selModel;
+    const fam = data?.modelFamilies?.find(f => f.family.toLowerCase() === targetFamilyName.toLowerCase());
+
+    let displayModelName = targetFamilyName;
+    if (fam) {
+      if (selStrength === 'low' && fam.variants.low) {
+        displayModelName = `${fam.family} (Low)`;
+      } else if (selStrength === 'high' && fam.variants.high) {
+        displayModelName = `${fam.family} (High)`;
+      } else if (selStrength === 'medium' && fam.variants.medium) {
+        displayModelName = `${fam.family} (Medium)`;
+      } else if (selStrength === 'auto') {
+        const defaultStrength = (selModel === 'auto') ? data?.currentDefaultStrength : 'default';
+        if (defaultStrength && defaultStrength !== 'default') {
+          displayModelName = `${fam.family} (${defaultStrength.charAt(0).toUpperCase() + defaultStrength.slice(1)})`;
+        } else {
+          displayModelName = fam.family;
+        }
+      } else {
+        displayModelName = `${fam.family} (${selStrength})`;
+      }
+    } else {
+      displayModelName = targetFamilyName;
+    }
+
+    activeTextEl.textContent = displayModelName;
+  }
+
   function initChatTerminal() {
     if (isChatInitialized) return;
     isChatInitialized = true;
@@ -108,22 +210,26 @@
       }
     });
 
-    // 3. 移动端抽屉开关
+    // 3. 模型与思考强度下拉联动
+    $('chat-model-select')?.addEventListener('change', updateActiveModelIndicator);
+    $('chat-strength-select')?.addEventListener('change', updateActiveModelIndicator);
+
+    // 4. 移动端抽屉开关
     $('chat-btn-toggle-sidebar')?.addEventListener('click', () => {
       $('chat-sidebar')?.classList.toggle('mobile-open');
     });
 
-    // 4. 刷新会话列表按钮
+    // 5. 刷新会话列表按钮
     $('chat-btn-refresh-list')?.addEventListener('click', () => {
       loadChatSessions(activeChatClient, false);
     });
 
-    // 5. 新建会话按钮
+    // 6. 新建会话按钮
     $('chat-btn-new-session')?.addEventListener('click', () => {
       startNewChatSession();
     });
 
-    // 6. 点击复制 CascadeId 短码
+    // 7. 点击复制 CascadeId 短码
     $('chat-cur-cascade-id')?.addEventListener('click', () => {
       if (activeCascadeId) {
         if (navigator.clipboard?.writeText) {
@@ -134,7 +240,7 @@
       }
     });
 
-    // 7. 初始化客户端胶囊与载入 0号 Ultra 会话
+    // 8. 初始化客户端胶囊与载入 0号 Ultra 会话
     const clients = window.latestFleetData?.clients || [
       { id: 'ultra', name: '0号 (Ultra主力 · 总指挥)', role: 'master', online: true },
       { id: 'pro1', name: 'Pro 1号', role: 'worker', online: true },
@@ -143,6 +249,7 @@
       { id: 'pro4', name: 'Pro 4号', role: 'worker', online: true }
     ];
     renderChatClientCapsules(clients);
+    loadClientModels(activeChatClient);
     loadChatSessions(activeChatClient, true);
   }
 
@@ -174,6 +281,7 @@
         if (cid === activeChatClient) return;
         activeChatClient = cid;
         renderChatClientCapsules(clients);
+        loadClientModels(activeChatClient);
         loadChatSessions(activeChatClient, true);
       });
     });
@@ -306,6 +414,10 @@
       // 更新状态徽章
       const statusBadge = $('chat-cur-status-badge');
       const runningBar = $('chat-running-bar');
+      if (data?.model) {
+        const activeTextEl = $('chat-active-model-text');
+        if (activeTextEl) activeTextEl.textContent = data.model;
+      }
       if (data?.isRunning) {
         if (statusBadge) {
           statusBadge.textContent = '🟢 思考/执行中';
@@ -417,6 +529,9 @@
     $('chat-cur-status-badge').className = 'badge badge-success';
 
     const apiRequest = getApiRequest();
+    const selModel = $('chat-model-select')?.value || 'auto';
+    const selStrength = $('chat-strength-select')?.value || 'auto';
+
     try {
       const res = await apiRequest('/api/chat/send', {
         method: 'POST',
@@ -424,6 +539,8 @@
           client: activeChatClient,
           cascadeId: activeCascadeId || '',
           prompt: prompt,
+          model: selModel !== 'auto' ? selModel : '',
+          thinkingStrength: selStrength !== 'auto' ? selStrength : '',
         })
       });
 
