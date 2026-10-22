@@ -61,6 +61,7 @@ function renderDispatchBannerHtml(lastDispatch) {
           <span class="detail-label">调度目标：</span>
           <strong class="target-name highlight-blue">${escapeHtml(lastDispatch.targetName || lastDispatch.targetId)}</strong>
           ${lastDispatch.reusedChat ? '<span class="badge-reused">复用已有会话</span>' : '<span class="badge-newchat">全新会话窗口</span>'}
+          ${lastDispatch.callbackStatus === 'watchdog_recovered' ? '<span class="tag-badge orange" style="background:#b45309;color:#fef3c7;font-weight:600;margin-left:6px;">🐕 看门狗已兜底</span>' : (lastDispatch.callbackStatus === 'delivered' ? '<span class="tag-badge green" style="background:#15803d;color:#dcfce7;font-weight:600;margin-left:6px;">✅ 已回调</span>' : (lastDispatch.callbackStatus === 'pending' ? '<span class="tag-badge" style="background:#374151;color:#e5e7eb;margin-left:6px;">⏳ 运行中</span>' : ''))}
         </div>
         <div class="dispatch-detail-item">
           <span class="detail-label">来源触发：</span>
@@ -153,13 +154,23 @@ function renderDispatchHistoryTable(history) {
   const tbody = $('dispatch-history-table-body');
   if (!tbody) return;
   if (!history || history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无跨会话派发流水记录</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">暂无跨会话派发流水记录</td></tr>';
     return;
   }
   tbody.innerHTML = history.map(item => {
     const timeStr = item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : '—';
     const sourceLabel = item.source === 'chat_agent' ? '<span class="badge" style="background:#1f2937;color:#9ca3af;">0号主控</span>' : '<span class="badge" style="background:#1e3a5f;color:#60a5fa;">Radar面板</span>';
     
+    // 升级 1：回调状态徽章渲染
+    let cbBadge = '<span class="text-xs text-muted">—</span>';
+    if (item.callbackStatus === 'watchdog_recovered') {
+      cbBadge = '<span class="tag-badge orange" style="background:#b45309;color:#fef3c7;font-weight:600;">🐕 看门狗已兜底</span>';
+    } else if (item.callbackStatus === 'delivered') {
+      cbBadge = '<span class="tag-badge green" style="background:#15803d;color:#dcfce7;font-weight:600;">✅ 已回调</span>';
+    } else if (item.callbackStatus === 'pending') {
+      cbBadge = '<span class="tag-badge" style="background:#374151;color:#e5e7eb;">⏳ 运行中</span>';
+    }
+
     let badges = [];
     if (item.flags?.selfTest) badges.push('<span class="tag-badge green">🧪 自测</span>');
     if (item.flags?.smartNew) badges.push('<span class="tag-badge blue">🧠 新窗</span>');
@@ -181,6 +192,7 @@ function renderDispatchHistoryTable(history) {
         <td class="text-xs text-muted">${timeStr}</td>
         <td>${sourceLabel}</td>
         <td><strong>${escapeHtml(item.targetName || item.targetId)}</strong> ${item.reusedChat ? '<span class="text-xs text-muted">(复用)</span>' : '<span class="text-xs text-success">(新开)</span>'}</td>
+        <td>${cbBadge}</td>
         <td>${badgesHtml}</td>
         <td>${tierBadge}</td>
         <td class="text-xs" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${promptPreview}">${promptPreview}</td>
