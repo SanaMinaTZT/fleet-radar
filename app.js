@@ -872,6 +872,7 @@ function renderFleetTab(clients) {
               </span>
               <div class="quota-metric">
                 <span>${fiveHPct}% ${t('remaining')}</span>
+                ${client.v5hText && client.v5hText !== '-' ? `<span class="badge" style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(56,139,253,0.15);color:#58a6ff;border:1px solid rgba(56,139,253,0.3);margin-left:4px;" title="5小时窗口每小时可用剩余额度速率">⚡ 5h速率: ${client.v5hText}</span>` : ''}
                 <span class="quota-countdown" title="距离5小时额度重置倒计时">⏱️ ${fiveHCountdown}</span>
               </div>
             </div>
@@ -888,6 +889,7 @@ function renderFleetTab(clients) {
               </span>
               <div class="quota-metric">
                 <span>${weekPct}% ${t('remaining')}</span>
+                ${client.vWeekText && client.vWeekText !== '-' ? `<span class="badge" style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:${(client.vWeek || 0) >= 1.0 ? 'rgba(63,185,80,0.15);color:#3fb950;border:1px solid rgba(63,185,80,0.3);' : 'rgba(210,153,34,0.15);color:#d29922;border:1px solid rgba(210,153,34,0.3);'};margin-left:4px;" title="周额度窗口每小时可用剩余额度速率">📈 周速率: ${client.vWeekText}</span>` : ''}
                 <span class="quota-countdown">(${weekCountdown})</span>
               </div>
             </div>
