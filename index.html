@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Antigravity Fleet Radar · 舰队总控雷达</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/preload.js"></script>
+</head>
+<body>
+  <!-- SVG 图标定义 -->
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="icon-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/><path d="m12 12 7-7"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></symbol>
+    <symbol id="icon-bolt" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="icon-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3m6-3v3M9 20v3m6-3v3M20 9h3m-3 6h3M1 9h3m-3 6h3"/></symbol>
+    <symbol id="icon-dollar" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="icon-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+    <symbol id="icon-fleet" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+    <symbol id="icon-send" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+    <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></symbol>
+    <symbol id="icon-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  </svg>
+
+  <div class="radar-container">
+    <!-- 顶部导航栏 / Header -->
+    <header class="radar-header">
+      <div class="brand">
+        <div class="radar-icon-wrap">
+          <svg class="icon pulse-glow"><use href="#icon-radar"/></svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">
+            <span>Antigravity Fleet Radar</span>
+            <span class="badge master-badge">0号 Ultra 总控</span>
+          </div>
+          <div class="brand-sub">
+            <span class="status-dot live" id="connection-dot"></span>
+            <span id="connection-status" data-i18n="connConnected">实时已连接</span>
+            <span class="separator">·</span>
+            <span id="fleet-node-count" class="node-count">6 节点</span>
+            <span class="separator">·</span>
+            <span id="last-updated" class="last-time">刚刚更新</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- 时间跨度选择器 -->
+        <div class="range-selector" role="group" aria-label="Time range">
+          <button class="range-btn active" data-range="today" data-i18n="rangeToday">今日</button>
+          <button class="range-btn" data-range="24h" data-i18n="range24h">近24h</button>
+          <button class="range-btn" data-range="7d" data-i18n="range7d">近7天</button>
+          <button class="range-btn" data-range="all" data-i18n="rangeAll">全部</button>
+        </div>
+
+        <!-- 语言切换 -->
+        <button class="icon-btn" id="lang-btn" title="切换中英文 / Switch Language">
+          <span id="lang-label">中</span>
+        </button>
+
+        <!-- 刷新数据与价格 -->
+        <button class="icon-btn" id="refresh-btn" title="刷新舰队数据与最新官方价格 / Refresh Data">
+          <svg class="icon"><use href="#icon-refresh"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 顶部总览大盘 (Hero Dashboard) -->
+    <section class="overview-section">
+      <!-- 双轨对比核心卡片 -->
+      <div class="hero-card tokens-card">
+        <div class="card-title-bar">
+          <div class="title-with-icon">
+            <svg class="icon"><use href="#icon-cpu"/></svg>
+            <span data-i18n="dualTrackTitle">全舰队 Token 双轨对比 (实扣 vs 缓存命中)</span>
+          </div>
+          <div class="cache-rate-badge" id="overview-cache-badge">
+            <span data-i18n="cacheHitRateLabel">缓存命中率</span>
+            <strong id="overview-cache-rate">0.0%</strong>
+          </div>
+        </div>
+
+        <!-- 双轨对比进度条 -->
+        <div class="dual-track-bar-wrap">
+          <div class="dual-track-bar">
+            <div class="track-segment segment-billed" id="bar-billed" style="width: 50%" title="实扣额度"></div>
+            <div class="track-segment segment-cache" id="bar-cache" style="width: 50%" title="缓存读取命中"></div>
+          </div>
+          <div class="dual-track-legend">
+            <div class="legend-item billed">
+              <span class="legend-dot dot-billed"></span>
+              <span class="legend-text" data-i18n="realBilledTokens">实扣额度 (Uncached In + Out)</span>
+              <strong id="stat-billed-tokens">—</strong>
+            </div>
+            <div class="legend-item cache">
+              <span class="legend-dot dot-cache"></span>
+              <span class="legend-text" data-i18n="cacheReadTokens">缓存读取命中 (Cache Read)</span>
+              <strong id="stat-cache-tokens">—</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- 详细指标细分 -->
+        <div class="token-metrics-grid">
+          <div class="mini-metric">
+            <span class="mini-label" data-i18n="uncachedInput">未缓存输入</span>
+            <strong class="mini-value" id="stat-uncached-input">—</strong>
+          </div>
+          <div class="mini-metric">
+            <span class="mini-label" data-i18n="cacheRead">缓存读取</span>
+            <strong class="mini-value highlight-green" id="stat-cache-read">—</strong>
+          </div>
+          <div class="mini-metric">
+            <span class="mini-label" data-i18n="outputTokens">模型输出</span>
+            <strong class="mini-value" id="stat-output-tokens">—</strong>
+          </div>
+          <div class="mini-metric">
+            <span class="mini-label" data-i18n="totalTokensSum">总吞吐流水</span>
+            <strong class="mini-value" id="stat-total-tokens">—</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Google AI Studio 账单与节省卡片 -->
+      <div class="hero-card billing-card">
+        <div class="card-title-bar">
+          <div class="title-with-icon">
+            <svg class="icon"><use href="#icon-dollar"/></svg>
+            <span data-i18n="billingCardTitle">Google AI Studio 计费账单与节省</span>
+          </div>
+          <button class="pricing-refresh-btn" id="btn-sync-pricing" title="点击重新向官方拉取实时单价">
+            <svg class="icon mini-icon"><use href="#icon-refresh"/></svg>
+            <span data-i18n="pricingSynced">官方官价已同步</span>
+          </button>
+        </div>
+
+        <div class="billing-summary-grid">
+          <!-- 真实消耗 (美元) -->
+          <div class="bill-box real-cost">
+            <div class="bill-header">
+              <span data-i18n="realCostUsd">真实消耗账单</span>
+              <span class="tag-real">实际支出</span>
+            </div>
+            <div class="bill-amount">
+              <span class="currency">$</span>
+              <strong id="stat-real-cost">0.0000</strong>
+            </div>
+            <div class="bill-sub" data-i18n="realCostDesc">实扣 Token 真实折合美元</div>
+          </div>
+
+          <!-- 缓存省下 (美元) -->
+          <div class="bill-box saved-cost">
+            <div class="bill-header">
+              <span data-i18n="cacheSavedUsd">缓存已省下金额</span>
+              <span class="tag-saved">
+                <svg class="icon mini-icon"><use href="#icon-sparkles"/></svg>
+                <span>已省 100%</span>
+              </span>
+            </div>
+            <div class="bill-amount saved-color">
+              <span class="currency">$</span>
+              <strong id="stat-saved-cost">0.0000</strong>
+            </div>
+            <div class="bill-sub" data-i18n="cacheSavedDesc">Prompt 缓存命中省下的真金白银</div>
+          </div>
+        </div>
+
+        <div class="billing-footer">
+          <div class="rate-source-info">
+            <span data-i18n="pricingSourceLabel">价格基准：</span>
+            <span id="pricing-source-tag">Google AI Studio 官方阶梯价 (≤200k / >200k)</span>
+          </div>
+          <div class="total-val-wrap">
+            <span data-i18n="nominalTotalLabel">原始等值总价：</span>
+            <span id="stat-nominal-cost">$0.0000</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 个功能标签页 / Navigation Tabs -->
+    <nav class="tabs-nav" role="tablist">
+      <button class="tab-btn active" role="tab" id="tab-btn-fleet" data-tab="fleet" aria-selected="true">
+        <svg class="icon"><use href="#icon-fleet"/></svg>
+        <span data-i18n="tabFleet">舰队矩阵 (Fleet)</span>
+        <span class="tab-badge" id="badge-fleet-online">6/6 在线</span>
+      </button>
+      <button class="tab-btn" role="tab" id="tab-btn-accounts" data-tab="accounts" aria-selected="false">
+        <svg class="icon"><use href="#icon-user"/></svg>
+        <span data-i18n="tabAccounts">👤 账号用量与预测</span>
+        <span class="tab-badge" id="badge-accounts-count">5 账号</span>
+      </button>
+      <button class="tab-btn" role="tab" id="tab-btn-models" data-tab="models" aria-selected="false">
+        <svg class="icon"><use href="#icon-chart"/></svg>
+        <span data-i18n="tabModels">会话与模型账单 (Sessions & Models)</span>
+      </button>
+      <button class="tab-btn" role="tab" id="tab-btn-dispatch" data-tab="dispatch" aria-selected="false">
+        <svg class="icon"><use href="#icon-bolt"/></svg>
+        <span data-i18n="tabDispatch">智能派发台 (Smart Dispatch)</span>
+        <span class="tab-badge-glow" id="badge-dispatch-rec">AI 推荐: Pro 3号</span>
+      </button>
+      <button class="tab-btn" role="tab" id="tab-btn-manage" data-tab="manage" aria-selected="false">
+        <svg class="icon"><use href="#icon-plus"/></svg>
+        <span data-i18n="tabManage">客户端扩展管理 (+ 节点扩容)</span>
+      </button>
+    </nav>
+
+    <!-- 标签页内容区域 -->
+    <main class="tabs-content">
+      <!-- Tab 1: 舰队矩阵 (Fleet) -->
+      <section class="tab-pane active" id="pane-fleet" role="tabpanel">
+        <div class="fleet-matrix-toolbar">
+          <div class="matrix-filter">
+            <button class="filter-chip active" data-filter="all" data-i18n="filterAll">全部客户端</button>
+            <button class="filter-chip" data-filter="worker" data-i18n="filterWorker">仅从属从机 (Pro 1~N)</button>
+            <button class="filter-chip" data-filter="dispatchable" data-i18n="filterDispatchable">参与派发中</button>
+          </div>
+          <div class="matrix-stats-summary" id="matrix-quick-summary">
+            <!-- 动态统计 -->
+          </div>
+        </div>
+
+        <!-- 客户端卡片网格容器 -->
+        <!-- 实时调度状态与门禁回馈横幅 (Live Dispatch & Gate Feedback) -->
+        <div class="live-dispatch-banner" id="overview-dispatch-banner" style="display: none; margin-bottom: 16px;"></div>
+
+        <div class="fleet-cards-grid" id="fleet-cards-container">
+          <div class="empty-state">
+            <div class="spinner"></div>
+            <p data-i18n="loadingFleet">正在探测全舰队 6 客户端实时状态与配额...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 2: 账号用量与周度耗尽预测 (Accounts & Forecast) -->
+      <section class="tab-pane" id="pane-accounts" role="tabpanel">
+        <!-- 顶部账号池概览 KPI 卡片 (4 张) -->
+        <div class="accounts-kpi-grid">
+          <div class="account-kpi-card">
+            <div class="kpi-title">已验证真实账号数</div>
+            <div class="kpi-val" id="acc-kpi-count">—</div>
+            <div class="kpi-sub" id="acc-kpi-filtered-tip">已自动过滤未登录客户端: Pro 5号</div>
+          </div>
+          <div class="account-kpi-card">
+            <div class="kpi-title">全账号池周平均剩余额度</div>
+            <div class="kpi-val highlight-blue" id="acc-kpi-avg-remain">—</div>
+            <div class="kpi-sub">加权平均可用配额</div>
+          </div>
+          <div class="account-kpi-card">
+            <div class="kpi-title">预计周度健康度</div>
+            <div class="kpi-val" id="acc-kpi-health">—</div>
+            <div class="kpi-sub" id="acc-kpi-health-sub">基于当前流速预测</div>
+          </div>
+          <div class="account-kpi-card">
+            <div class="kpi-title">全账号池累计计费 Token / 价值</div>
+            <div class="kpi-val highlight-green" id="acc-kpi-billed-cost">—</div>
+            <div class="kpi-sub" id="acc-kpi-tokens-sub">实扣 Token 真实折合美元</div>
+          </div>
+        </div>
+
+        <!-- 图表区一：各账号用量对比柱状图 (Vertical Column Chart) -->
+        <div class="sub-panel">
+          <div class="sub-panel-header">
+            <div class="sub-panel-title">
+              <svg class="icon"><use href="#icon-chart"/></svg>
+              <span>📊 各账号用量对比 (本周已用 vs 5h已用 vs 真实计费吞吐)</span>
+            </div>
+            <span class="panel-subtitle">纯 CSS/SVG 响应式渲染 · 直观对比各账号负载</span>
+          </div>
+          <div class="account-column-chart-container" id="account-column-chart">
+            <!-- 动态渲染垂直柱状图 -->
+          </div>
+        </div>
+
+        <!-- 图表区二：各账号周度额度消耗与一周结束前预测条形图 (Horizontal Stacked Bar Chart) -->
+        <div class="sub-panel">
+          <div class="sub-panel-header">
+            <div class="sub-panel-title">
+              <svg class="icon"><use href="#icon-clock"/></svg>
+              <span>📉 各账号周度消耗流速与【一周结束前耗尽预测】条形图</span>
+            </div>
+            <span class="panel-subtitle">实心为当前已用，斜纹为预计周重置前未来消耗，绿/红为结余或透支预警</span>
+          </div>
+          <div class="account-forecast-bars-container" id="account-forecast-bars">
+            <!-- 动态渲染水平堆叠预测条 -->
+          </div>
+        </div>
+
+        <!-- 详情区三：账号轮转与周度预测明细表格 -->
+        <div class="sub-panel">
+          <div class="sub-panel-header">
+            <div class="sub-panel-title">
+              <svg class="icon"><use href="#icon-fleet"/></svg>
+              <span>📋 账号轮转与周度预测明细表 (Account Forecast Table)</span>
+            </div>
+            <span class="panel-subtitle">以 Google 账号为唯一主键 · 支持多账号轮转与耗尽倒计时</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="accounts-forecast-table">
+              <thead>
+                <tr>
+                  <th>Google 账号 (Email)</th>
+                  <th>当前绑定状态</th>
+                  <th class="text-right">5h 已用 / 剩余 (倒计时)</th>
+                  <th class="text-right">本周已用 / 剩余 (周重置)</th>
+                  <th class="text-right">消耗流速 (%/h · %/天)</th>
+                  <th class="text-right">真实计费 / 总 Token</th>
+                  <th class="text-left">🔮 一周结束前预计剩余 / 预估耗尽时刻</th>
+                </tr>
+              </thead>
+              <tbody id="accounts-table-body">
+                <tr><td colspan="7" class="text-center text-muted">正在加载账号池数据...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 3: 会话与模型账单 (Sessions & Models) -->
+      <section class="tab-pane" id="pane-models" role="tabpanel">
+        <!-- 上半部分：按模型汇总统计表 -->
+        <div class="sub-panel">
+          <div class="sub-panel-header">
+            <div class="sub-panel-title">
+              <svg class="icon"><use href="#icon-cpu"/></svg>
+              <span data-i18n="modelsTableTitle">全舰队模型使用明细与 Google AI Studio 价格核算</span>
+            </div>
+            <span class="panel-subtitle" data-i18n="modelsTableSub">按所选时间范围统计各模型请求数、实扣与缓存量及支出</span>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table" id="models-summary-table">
+              <thead>
+                <tr>
+                  <th data-i18n="thModel">模型名称 (Model)</th>
+                  <th class="text-right" data-i18n="thRequests">请求次数</th>
+                  <th class="text-right" data-i18n="thUncached">未缓存输入</th>
+                  <th class="text-right" data-i18n="thCacheRead">缓存读取</th>
+                  <th class="text-right" data-i18n="thOutput">生成输出</th>
+                  <th class="text-right" data-i18n="thHitRate">缓存命中率</th>
+                  <th class="text-right" data-i18n="thCost">折算美元花费</th>
+                </tr>
+              </thead>
+              <tbody id="models-table-body">
+                <tr><td colspan="7" class="text-center text-muted" data-i18n="noModelData">暂无模型调用数据</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 下半部分：跨客户端会话列表 (揪出偷跑流量的会话) -->
+        <div class="sub-panel">
+          <div class="sub-panel-header">
+            <div class="sub-panel-title">
+              <svg class="icon"><use href="#icon-chart"/></svg>
+              <span data-i18n="sessionsTableTitle">跨客户端最近会话列表 (流量与成本监控)</span>
+            </div>
+            <div class="sessions-filter-wrap">
+              <input type="text" id="session-search-input" class="search-input" placeholder="搜索会话标题、ID或模型..." data-i18n-placeholder="searchSessions">
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table" id="sessions-summary-table">
+              <thead>
+                <tr>
+                  <th data-i18n="thClient">所属客户端</th>
+                  <th data-i18n="thSessionTitle">会话标题 / 标识</th>
+                  <th data-i18n="thSessionModel">调用的模型</th>
+                  <th class="text-right" data-i18n="thRounds">轮数/步数</th>
+                  <th class="text-right" data-i18n="thBilledTokens">实扣 Token</th>
+                  <th class="text-right" data-i18n="thHitRate">缓存命中率</th>
+                  <th class="text-right" data-i18n="thSessionCost">会话美元花费</th>
+                  <th class="text-right" data-i18n="thAction">操作</th>
+                </tr>
+              </thead>
+              <tbody id="sessions-table-body">
+                <tr><td colspan="8" class="text-center text-muted" data-i18n="noSessionData">正在扫描各客户端会话...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 3: 智能派发台 (Smart Dispatch) -->
+      <section class="tab-pane" id="pane-dispatch" role="tabpanel">
+        <!-- 顶部高亮：AI 负载均衡推荐目标 -->
+        <!-- 实时调度状态与门禁回馈横幅 (Live Dispatch & Gate Feedback) -->
+        <div class="live-dispatch-banner" id="tab3-dispatch-banner" style="display: none; margin-bottom: 16px;"></div>
+
+        <div class="dispatch-rec-banner" id="dispatch-rec-banner">
+          <div class="rec-icon">
+            <svg class="icon"><use href="#icon-sparkles"/></svg>
+          </div>
+          <div class="rec-content">
+            <div class="rec-title-row">
+              <span class="rec-label" data-i18n="aiRecLabel">⚡ AI 负载均衡推荐目标：</span>
+              <strong class="rec-target-name" id="rec-target-name">Pro 3号</strong>
+              <span class="badge score-badge" id="rec-target-score">综合健康评分: 98</span>
+            </div>
+            <div class="rec-desc" id="rec-target-reason">
+              5小时额度充裕（剩余 92%），周额度健康，当前处于空闲等待状态，推荐作为本轮任务派发目标。
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-quick-select-rec" data-i18n="btnUseRec">一键选定推荐目标</button>
+        </div>
+
+        <!-- 派发控制台卡片 -->
+        <div class="dispatch-form-card">
+          <div class="form-section">
+            <label class="form-label">
+              <span data-i18n="dispatchTargetLabel">选择执行客户端</span>
+              <span class="label-tip" data-i18n="dispatchTargetTip">(支持智能自动分配或手动多选并发)</span>
+            </label>
+
+            <!-- 策略选择与快捷模式 -->
+            <div class="target-mode-selector">
+              <label class="radio-card active">
+                <input type="radio" name="dispatch-mode" value="auto" checked>
+                <div class="radio-card-body">
+                  <div class="radio-title">
+                    <svg class="icon"><use href="#icon-bolt"/></svg>
+                    <span data-i18n="modeAutoBalanced">⚡ 自动按剩余额度与重置倒计时均衡分配 (Reset-Urgency Balanced)</span>
+                  </div>
+                  <div class="radio-desc" data-i18n="modeAutoBalancedDesc">自动测算 5h/周额度及重置倒计时，5h临期白嫖优先提权，挑选最优从机派发</div>
+                </div>
+              </label>
+
+              <label class="radio-card">
+                <input type="radio" name="dispatch-mode" value="manual">
+                <div class="radio-card-body">
+                  <div class="radio-title">
+                    <svg class="icon"><use href="#icon-fleet"/></svg>
+                    <span data-i18n="modeManual">🎯 手动指定单台或并发勾选多台</span>
+                  </div>
+                  <div class="radio-desc" data-i18n="modeManualDesc">自由勾选目标从机，支持多客户端同时协作并统一汇报</div>
+                </div>
+              </label>
+            </div>
+
+            <!-- 手动勾选客户端列表 (仅在 manual 模式展开) -->
+            <div class="manual-clients-selector" id="manual-clients-box" style="display: none;">
+              <div class="clients-checkbox-grid" id="dispatch-checkbox-grid">
+                <!-- 动态渲染客户端复选框 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 任务指令输入区 -->
+          <div class="form-section">
+            <div class="label-with-templates">
+              <label class="form-label" for="dispatch-prompt-input" data-i18n="taskPromptLabel">任务指令 (Prompt)</label>
+              <div class="quick-template-chips">
+                <button class="chip-sm" data-prompt="请协助审查当前项目代码中的潜在安全与性能隐患，并输出修改建议。">代码审查</button>
+                <button class="chip-sm" data-prompt="请为当前核心业务逻辑编写完备的自动化单元测试用例。">单元测试</button>
+                <button class="chip-sm" data-prompt="请协助重构模块架构，提高内聚降低耦合，保持接口向后兼容。">模块重构</button>
+                <button class="chip-sm" data-prompt="请编写详尽的中英文对照技术接口规范文档。">接口文档</button>
+              </div>
+            </div>
+            <textarea id="dispatch-prompt-input" class="dispatch-textarea" rows="4" placeholder="输入要派发给客户端的具体任务或代码开发指令..."></textarea>
+            <!-- 动态规模评估实时预览条 -->
+            <div class="scale-preview-box" id="scalePreviewBox" style="display: none; margin-top: 8px;"></div>
+          </div>
+
+          <!-- 高级参数开关 -->
+          <div class="form-section form-options-row">
+              <label class="toggle-option">
+                <input type="checkbox" id="dispatch-opt-force-new">
+                <span class="toggle-switch"></span>
+                <span class="toggle-label" data-i18n="optForceNew">强制新建会话窗口 (忽略绑定，开新对话)</span>
+              </label>
+              <label class="toggle-option">
+                <input type="checkbox" id="smartNew" checked>
+                <span class="toggle-switch"></span>
+                <span class="toggle-label" data-i18n="optSmartNew">🧠 智能新建会话窗口 (检测到新话题/新项目或旧会话超载时，自动在 Pro 中开新窗口)</span>
+              </label>
+              <label class="toggle-option">
+                <input type="checkbox" id="autoSplit" checked>
+                <span class="toggle-switch"></span>
+                <span class="toggle-label" data-i18n="optAutoSplit">📐 开启智能规模评估与自动多机拆分 (Auto-Scale & Split)</span>
+              </label>
+              <label class="toggle-option">
+                <input type="checkbox" id="dispatch-opt-callback" checked>
+                <span class="toggle-switch"></span>
+                <span class="toggle-label" data-i18n="optCallback">任务完成自动回调通知 0号 Ultra 主控 (带完成回调推送)</span>
+              </label>
+              <label class="toggle-option">
+                <input type="checkbox" id="dispatch-opt-self-test">
+                <span class="toggle-switch"></span>
+                <span class="toggle-label" data-i18n="optSelfTest">开启强制自测闭环 (Self-Test Gate)</span>
+              </label>
+              <label class="toggle-option">
+                <input type="checkbox" id="dispatch-opt-peer-review">
+                <span class="toggle-switch"></span>
+                <span class="toggle-label" data-i18n="optPeerReview">开启双机交叉审查 (Cross-Client Peer Review)</span>
+              </label>
+            </div>
+
+          <!-- 派发操作栏 -->
+          <div class="dispatch-action-bar">
+            <button class="btn btn-primary btn-lg" id="btn-submit-dispatch">
+              <svg class="icon"><use href="#icon-send"/></svg>
+              <span data-i18n="btnSendDispatch">🚀 立即派发指令</span>
+            </button>
+            <span class="dispatch-tip-text text-muted" data-i18n="dispatchNotice">
+              遵循静默派发铁律：派发后子客户端窗口每 2 分钟自主汇报，完成后自动回调回 Ultra 主控。
+            </span>
+          </div>
+
+          <!-- 派发结果展示区 -->
+          <div class="dispatch-result-box" id="dispatch-result-box" style="display: none;">
+            <div class="result-header">
+              <div class="result-title">
+                <svg class="icon text-success"><use href="#icon-check"/></svg>
+                <span data-i18n="dispatchSuccessTitle">派发任务已提交成功</span>
+              </div>
+              <span class="result-time" id="dispatch-res-time">—</span>
+            </div>
+            <div class="result-details-grid">
+              <div class="res-item">
+                <span class="res-label" data-i18n="resTarget">执行客户端：</span>
+                <strong id="dispatch-res-target">—</strong>
+              </div>
+              <div class="res-item">
+                <span class="res-label" data-i18n="resCascadeId">会话 CascadeId：</span>
+                <code id="dispatch-res-cascade-id">—</code>
+              </div>
+              <div class="res-item">
+                <span class="res-label" data-i18n="resReason">调度分配依据：</span>
+                <span id="dispatch-res-reason">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 最近跨会话派发流水 (Live Dispatch Feed) -->
+          <div class="sub-panel" style="margin-top: 24px;">
+            <div class="sub-panel-header">
+              <div class="sub-panel-title">
+                <svg class="icon"><use href="#icon-bolt"/></svg>
+                <span>📜 最近跨会话派发流水 (Live Dispatch Feed)</span>
+              </div>
+              <span class="text-xs text-muted">来自对话终端与面板调度的实时跨会话派发与门禁状态</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>来源</th>
+                    <th>目标客户端</th>
+                    <th>生效门禁与策略</th>
+                    <th>工程规模</th>
+                    <th>指令摘要</th>
+                    <th>子会话 ID</th>
+                  </tr>
+                </thead>
+                <tbody id="dispatch-history-table-body">
+                  <tr><td colspan="7" class="text-center text-muted">暂无跨会话派发流水记录</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 4: 客户端扩展管理 (+ 节点扩容) -->
+      <section class="tab-pane" id="pane-manage" role="tabpanel">
+        <!-- 头部说明与新增按钮 -->
+        <div class="manage-header-bar">
+          <div class="manage-title-wrap">
+            <div class="sub-panel-title">
+              <svg class="icon"><use href="#icon-shield"/></svg>
+              <span data-i18n="manageTitle">舰队节点拓扑与动态扩容</span>
+            </div>
+            <p class="panel-subtitle" data-i18n="manageDesc">
+              管理本机的 Antigravity 客户端注册表。支持一键将本地多实例（如 Pro 6号、Pro 7号等）纳入总控调度并自动建立目录联接。
+            </p>
+          </div>
+          <button class="btn btn-primary" id="btn-open-add-modal">
+            <svg class="icon"><use href="#icon-plus"/></svg>
+            <span data-i18n="btnAddClient">+ 新增扩容客户端 (Pro X)</span>
+          </button>
+        </div>
+
+        <!-- 现有客户端列表 -->
+        <div class="nodes-list-container" id="manage-nodes-list">
+          <!-- 动态渲染各节点卡片 -->
+        </div>
+
+        <!-- 新增客户端折叠面板 / 模态卡片 -->
+        <div class="modal-backdrop" id="add-client-modal" style="display: none;">
+          <div class="modal-card">
+            <div class="modal-header">
+              <div class="modal-title">
+                <svg class="icon"><use href="#icon-plus"/></svg>
+                <span data-i18n="modalAddTitle">新增舰队从属节点 (Node Expansion)</span>
+              </div>
+              <button class="icon-btn modal-close" id="btn-close-modal">✕</button>
+            </div>
+
+            <form id="form-add-client" class="modal-body">
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label class="form-label" for="input-client-id" data-i18n="fieldClientId">客户端标识 (ID, 如 pro6)</label>
+                  <input type="text" id="input-client-id" class="text-input" placeholder="pro6" required pattern="[a-zA-Z0-9_-]+">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="input-client-name" data-i18n="fieldClientName">显示名称 (Name)</label>
+                  <input type="text" id="input-client-name" class="text-input" placeholder="Pro 6号" required>
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label class="form-label" for="input-client-email" data-i18n="fieldClientEmail">登录 Google 邮箱</label>
+                  <input type="email" id="input-client-email" class="text-input" placeholder="example6@gmail.com" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="input-client-role" data-i18n="fieldClientRole">角色定位</label>
+                  <select id="input-client-role" class="select-input">
+                    <option value="worker" selected data-i18n="roleWorker">从属工作节点 (Worker)</option>
+                    <option value="master" data-i18n="roleMaster">指挥控制节点 (Master)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="input-client-roaming" data-i18n="fieldClientRoaming">Roaming 配置目录路径</label>
+                <input type="text" id="input-client-roaming" class="text-input font-mono" placeholder="C:\Users\23656\AppData\Roaming\Antigravity-Pro6" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="input-client-brain" data-i18n="fieldClientBrain">Brain 工作区目录路径</label>
+                <input type="text" id="input-client-brain" class="text-input font-mono" placeholder="C:\Users\23656\.antigravity-multi\pro6\.gemini\antigravity\brain" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="input-client-shortcut" data-i18n="fieldClientShortcut">桌面启动快捷方式路径 (可选)</label>
+                <input type="text" id="input-client-shortcut" class="text-input font-mono" placeholder="C:\Users\23656\Desktop\大模型相关\Antigravity 桌面端 - Pro 6号.lnk">
+              </div>
+
+              <div class="form-group">
+                <label class="toggle-option highlight-toggle">
+                  <input type="checkbox" id="chk-auto-init-profile" checked>
+                  <span class="toggle-switch"></span>
+                  <span class="toggle-label" data-i18n="optAutoInitJunction">
+                    <strong>⚡ 自动在本地初始化该客户端目录与配置联接（Junction）</strong><br>
+                    <span class="text-sub">自动在 .antigravity-multi\proX 创建环境并建立与 .gemini\config 的共享联接</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-modal" data-i18n="btnCancel">取消</button>
+                <button type="submit" class="btn btn-primary" id="btn-confirm-add" data-i18n="btnConfirmAdd">确认注册扩容</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 底部状态条 / Footer Status Strip -->
+    <footer class="radar-footer">
+      <div class="footer-left">
+        <span class="status-indicator"></span>
+        <span id="footer-status-text">Fleet Radar v1.0.0 · 运行于 0号 Ultra 主控环境</span>
+      </div>
+      <div class="footer-right">
+        <span id="footer-strategy-text">派发策略: 自动负载均衡 (auto-balanced)</span>
+        <span class="separator">|</span>
+        <span id="footer-rates-text">计费核算已就绪</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
