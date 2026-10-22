@@ -26,6 +26,7 @@
     <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
     <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></symbol>
     <symbol id="icon-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="icon-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
   </svg>
 
   <div class="radar-container">
@@ -192,6 +193,11 @@
         <span data-i18n="tabFleet">舰队矩阵 (Fleet)</span>
         <span class="tab-badge" id="badge-fleet-online">6/6 在线</span>
       </button>
+      <button class="tab-btn" role="tab" id="tab-btn-chat" data-tab="chat" aria-selected="false">
+        <svg class="icon"><use href="#icon-chat"/></svg>
+        <span data-i18n="tabChat">💬 远程对话终端 (Web Chat)</span>
+        <span class="tab-badge" id="badge-chat-active">👑 Ultra 活跃</span>
+      </button>
       <button class="tab-btn" role="tab" id="tab-btn-accounts" data-tab="accounts" aria-selected="false">
         <svg class="icon"><use href="#icon-user"/></svg>
         <span data-i18n="tabAccounts">👤 账号用量与预测</span>
@@ -239,7 +245,92 @@
         </div>
       </section>
 
-      <!-- Tab 2: 账号用量与周度耗尽预测 (Accounts & Forecast) -->
+            <!-- Tab: 💬 远程对话终端 (Web Antigravity 前端) -->
+      <section class="tab-pane" id="pane-chat" role="tabpanel">
+        <div class="chat-terminal-layout">
+          <!-- 顶部客户端切换胶囊栏 (Client Selector Bar) -->
+          <div class="chat-client-bar">
+            <div class="client-capsules" id="chat-client-capsules">
+              <!-- 客户端胶囊切换按钮由 JS 动态渲染 -->
+            </div>
+            <div class="chat-bar-actions">
+              <span class="chat-auto-refresh-tag" id="chat-refresh-indicator">
+                <span class="status-dot live"></span> 自动刷新中 (3s)
+              </span>
+            </div>
+          </div>
+
+          <!-- 双栏主体容器 (手机移动端响应式折叠/单栏抽屉) -->
+          <div class="chat-body-container">
+            <!-- 左侧：会话列表栏 (Chat Sidebar) -->
+            <aside class="chat-sidebar" id="chat-sidebar">
+              <div class="sidebar-header">
+                <div class="sidebar-title-row">
+                  <span class="sidebar-title">📁 会话列表</span>
+                  <div class="sidebar-actions">
+                    <button class="btn btn-primary btn-xs" id="chat-btn-new-session" title="在当前客户端开辟新会话">
+                      ➕ 新建会话
+                    </button>
+                    <button class="icon-btn btn-xs" id="chat-btn-refresh-list" title="刷新会话列表">
+                      <svg class="icon icon-sm"><use href="#icon-refresh"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="sessions-list-scroll" id="chat-sessions-list">
+                <div class="chat-empty-hint">正在加载会话列表...</div>
+              </div>
+            </aside>
+
+            <!-- 右侧：沉浸式对话窗口 (Chat Main Viewport) -->
+            <main class="chat-main-viewport" id="chat-main-viewport">
+              <!-- 顶部会话状态头 -->
+              <div class="chat-viewport-header">
+                <div class="chat-header-info">
+                  <button class="btn-toggle-sidebar" id="chat-btn-toggle-sidebar" title="展开/收起会话列表">
+                    ☰
+                  </button>
+                  <span class="client-badge" id="chat-cur-client-badge">👑 0号 Ultra</span>
+                  <h3 class="cur-session-title" id="chat-cur-session-title">正在载入会话...</h3>
+                  <span class="cascade-id-tag" id="chat-cur-cascade-id" title="点击复制 CascadeId"></span>
+                </div>
+                <div class="chat-header-status">
+                  <span class="badge" id="chat-cur-status-badge">⚪ 空闲</span>
+                </div>
+              </div>
+
+              <!-- 消息流区域 (Messages Stream) -->
+              <div class="chat-messages-container" id="chat-messages-container">
+                <div class="chat-empty-hint">请选择或新建一个会话开始对话</div>
+              </div>
+
+              <!-- 运行中动态呼吸条 (Running Indicator) -->
+              <div class="chat-running-bar" id="chat-running-bar" style="display: none;">
+                <span class="spinner-dot"></span>
+                <span class="running-text">⏳ Agent 正在思考或执行工具中...</span>
+              </div>
+
+              <!-- 底部输入编辑栏 (Composer Bar) -->
+              <div class="chat-composer-bar">
+                <div class="composer-inner">
+                  <textarea
+                    id="chat-composer-input"
+                    class="composer-textarea"
+                    placeholder="给当前选中的客户端发送指令... (桌面端 Enter 发送，Shift+Enter 换行；手机端点击右侧发送)"
+                    rows="2"
+                  ></textarea>
+                  <button class="btn btn-primary composer-send-btn" id="chat-btn-send">
+                    <svg class="icon"><use href="#icon-send"/></svg>
+                    <span>发送</span>
+                  </button>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </section>
+
+<!-- Tab 2: 账号用量与周度耗尽预测 (Accounts & Forecast) -->
       <section class="tab-pane" id="pane-accounts" role="tabpanel">
         <!-- 顶部账号池概览 KPI 卡片 (4 张) -->
         <div class="accounts-kpi-grid">
@@ -482,7 +573,7 @@
                 <span class="toggle-label" data-i18n="optSmartNew">🧠 智能新建会话窗口 (检测到新话题/新项目或旧会话超载时，自动在 Pro 中开新窗口)</span>
               </label>
               <label class="toggle-option">
-                <input type="checkbox" id="autoSplit" checked>
+                <input type="checkbox" id="autoSplit">
                 <span class="toggle-switch"></span>
                 <span class="toggle-label" data-i18n="optAutoSplit">📐 开启智能规模评估与自动多机拆分 (Auto-Scale & Split)</span>
               </label>
@@ -687,5 +778,6 @@
   </div>
 
   <script src="./app.js"></script>
+  <script src="./chat_client.js"></script>
 </body>
 </html>

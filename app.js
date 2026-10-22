@@ -1277,56 +1277,44 @@ function renderDispatchClientCheckboxes(clients) {
   const container = $('dispatch-checkbox-grid');
   if (!container) return;
 
+  const ultraClient = clients.find(c => c.id === 'ultra');
   const workers = clients.filter(c => c.role !== 'master');
-  container.innerHTML = workers.map(w => {
-    const timeText = w.online && w.fiveHourResetText && w.fiveHourResetText !== '-' ? ` | ⏱️ ${w.fiveHourResetText}` : '';
-    const bonusText = w.online && w.timeBonus ? ` (${w.timeBonus > 0 ? '+' : ''}${w.timeBonus}分)` : '';
+
+  let html = '';
+  if (ultraClient) {
+    html += '<label class="client-chk-item client-chk-ultra">' +
+      '<input type="checkbox" name="manual-client" value="ultra">' +
+      '<span><strong>👑 0号 Ultra (交由 Argon 主控统筹拆解)</strong> (' + (ultraClient.online ? '在线' : '离线') + ')</span>' +
+    '</label>';
+  }
+
+  html += workers.map(w => {
+    const timeText = w.online && w.fiveHourResetText && w.fiveHourResetText !== '-' ? ' | ⏱️ ' + w.fiveHourResetText : '';
+    const bonusText = w.online && w.timeBonus ? ' (' + (w.timeBonus > 0 ? '+' : '') + w.timeBonus + '分)' : '';
     const urgentTag = w.online && w.timeZone === 'urgent-burn' ? ' 🔥' : '';
-    return `
-    <label class="client-chk-item">
-      <input type="checkbox" name="manual-client" value="${w.id}" ${w.enabledForDispatch ? 'checked' : ''}>
-      <span><strong>${w.name}</strong> (${w.online ? '在线' : '离线'}${timeText}${bonusText}${urgentTag})</span>
-    </label>
-  `;
+    return '<label class="client-chk-item">' +
+      '<input type="checkbox" name="manual-client" value="' + w.id + '" ' + (w.enabledForDispatch ? 'checked' : '') + '>' +
+      '<span><strong>' + w.name + '</strong> (' + (w.online ? '在线' : '离线') + timeText + bonusText + urgentTag + ')</span>' +
+    '</label>';
   }).join('');
+
+  container.innerHTML = html;
 }
 
-// 智能任务规模评估 (Tier S/M vs Tier L/XL)
+// 智能任务规模评估 (严禁将普通 1. 2. 3. 序号误判为多机大工程！)
 function estimateTaskScale(prompt) {
   if (!prompt || typeof prompt !== 'string') {
     return { tier: 'Tier S/M', reason: '空或极短任务', isLarge: false, splitCount: 1 };
   }
   const text = prompt.trim();
-  const len = text.length;
 
-  // 条件 1: 文本中明确包含 1.、2.、3. (或 任务1、模块一、第一部分 等) 3 个及以上独立编号子项，且总字数 >= 120 字
-  const numberedMatches = text.match(/(?:^|\n|\s)(?:\d+[\.、\)]|###?\s*任务\s*\d+|模块[一二三四1234]|第[一二三四1234]部分)/g) || [];
-  const has3NumberedItems = numberedMatches.length >= 3 && len >= 120;
-
-  // 条件 2: 文本同时包含多个正交架构层关键词，且总字数 >= 150 字
-  const hasFrontend = /前端|UI|界面|样式|组件|React|Vue|HTML|CSS/i.test(text);
-  const hasBackend = /后端|接口|API|服务端|Server|Node|Express|Controller|路由/i.test(text);
-  const hasDataTest = /测试|数据库|脚本|验证|SQL|DB|UnitTest|Test/i.test(text);
-  const hasMultiModule = /多模块|拆分|全栈|并发调研|协同/i.test(text);
-  const layerCount = (hasFrontend ? 1 : 0) + (hasBackend ? 1 : 0) + (hasDataTest ? 1 : 0);
-  const hasCrossLayer = (layerCount >= 2 || hasMultiModule) && len >= 150;
-
-  // 条件 3: 预估代码规模关键词 >= 600 行
-  const hasLargeCode = /(?:(?:超过|大于|预估|约|至少)?\s*(?:[6-9]\d{2}|\d{4,})\s*行)|大工程|大型项目/i.test(text);
-
-  if (has3NumberedItems || hasCrossLayer || hasLargeCode) {
-    let estParts = 2;
-    if (numberedMatches.length >= 3) {
-      estParts = Math.min(3, numberedMatches.length);
-    } else if (hasFrontend && hasBackend && hasDataTest) {
-      estParts = 3;
-    }
-    const r = has3NumberedItems
-      ? `检测到 ${numberedMatches.length} 个独立子任务序号项`
-      : (hasCrossLayer ? '检测到跨前端/后端/测试等多层正交架构' : '检测到大型代码规模要求');
+  // 严格条件：必须包含明确的独立章节标题（如 ### 【子任务 1】、### 任务 1、### 模块一），且 >= 2 个独立章节
+  const sectionMatches = text.match(/^[ \t]*#{1,4}\s*(?:【?(?:子任务|任务|模块)\s*[一二三四1234\d]+】?|【子任务\s*\d+】)/gm) || [];
+  if (sectionMatches.length >= 2) {
+    const estParts = Math.min(3, sectionMatches.length);
     return {
       tier: 'Tier L/XL',
-      reason: r,
+      reason: '检测到 ' + sectionMatches.length + ' 个预先隔离的独立章节子任务标题',
       isLarge: true,
       splitCount: estParts
     };
@@ -1334,7 +1322,7 @@ function estimateTaskScale(prompt) {
 
   return {
     tier: 'Tier S/M',
-    reason: '单模块/独立闭环任务 (预估 <600行)',
+    reason: '未包含预先隔离的独立子任务章节标题，强制单机独立闭环',
     isLarge: false,
     splitCount: 1
   };
@@ -1563,12 +1551,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       $(`pane-${targetTab}`)?.classList.add('active');
 
       // 即刻触发该 Tab 渲染，无需等待轮询
+      if (targetTab === 'chat') {
+        if (typeof window.initChatTerminal === 'function') window.initChatTerminal();
+        if (typeof window.startChatPolling === 'function') window.startChatPolling();
+      } else {
+        if (typeof window.stopChatPolling === 'function') window.stopChatPolling();
+      }
+
       if (latestFleetData) {
         if (targetTab === 'accounts') renderAccountsTab(latestFleetData);
         else if (targetTab === 'models') renderModelsAndSessionsTab(latestFleetData);
         else if (targetTab === 'fleet') renderFleetTab(latestFleetData.clients || []);
         else if (targetTab === 'dispatch') renderDispatchClientCheckboxes(latestFleetData.clients || []);
         else if (targetTab === 'manage') renderManageTab(latestFleetData.clients || []);
+        else if (targetTab === 'chat' && typeof window.renderChatClientCapsules === 'function') {
+          window.renderChatClientCapsules(latestFleetData.clients || []);
+        }
       }
     });
   });
