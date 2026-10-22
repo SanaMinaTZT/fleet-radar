@@ -517,25 +517,34 @@ function formatCountdown(sec) {
 // -----------------------------------------------------------------------------
 let API_BASE = '';
 
+function isNonLocalEnv() {
+  if (typeof window === 'undefined' || !window.location) return false;
+  const hostname = window.location.hostname || '';
+  if (!hostname) return false;
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
+  if (window.location.protocol === 'plugin:' || window.location.protocol === 'vscode-webview:') return false;
+  return true;
+}
+
 function resolveApiBase() {
   if (typeof window === 'undefined' || !window.location) return 'http://127.0.0.1:17892';
+
+  if (!isNonLocalEnv()) {
+    // 本地环境（包括 Antigravity 内嵌控制面板 plugin://、vscode-webview://、localhost、127.0.0.1 等），一律优先统一指向 127.0.0.1:17892！
+    return 'http://127.0.0.1:17892';
+  }
+
+  const hostname = window.location.hostname || '';
+  if (hostname.includes('trycloudflare.com')) {
+    if (window.location.origin && window.location.origin !== 'null') {
+      return window.location.origin.replace(/\/+$/, '');
+    }
+  }
 
   const savedApi = (typeof localStorage !== 'undefined' && localStorage.getItem('fleet_api_base')) || '';
   if (savedApi) return savedApi.trim().replace(/\/+$/, '');
 
-  const hostname = window.location.hostname || '';
-
-  // 如果处于公网 HTTPS 托管环境（如 GitHub Pages 或 Cloudflare 隧道）
-  const isPublicWeb = hostname.endsWith('github.io') || hostname.includes('trycloudflare.com');
-  if (isPublicWeb) {
-    if (window.location.origin && window.location.origin !== 'null' && !hostname.endsWith('github.io')) {
-      return window.location.origin.replace(/\/+$/, '');
-    }
-    return ''; // GitHub Pages 默认等待 resolveRemoteConfig 载入 remote_config.json
-  }
-
-  // 本地环境（包括 Antigravity 内嵌控制面板 plugin://、vscode-webview://、localhost、127.0.0.1 等），一律优先统一指向 127.0.0.1:17892！
-  return 'http://127.0.0.1:17892';
+  return ''; // 等待 resolveRemoteConfig 载入 remote_config.json
 }
 
 function initRemoteAccessConfig() {
@@ -548,7 +557,8 @@ function initRemoteAccessConfig() {
       if (keyFromUrl) {
         localStorage.setItem('fleet_access_key', keyFromUrl.trim());
       }
-      if (apiFromUrl) {
+      // 非本地环境（如 GitHub Pages），不要让可能过期的旧 ?api= 锁定持久化缓存，等 resolveRemoteConfig 统一拉取最新权威 remote_config.json
+      if (apiFromUrl && !isNonLocalEnv()) {
         const cleanApi = apiFromUrl.trim().replace(/\/+$/, '');
         localStorage.setItem('fleet_api_base', cleanApi);
       }
@@ -566,21 +576,22 @@ function initRemoteAccessConfig() {
   API_BASE = resolveApiBase();
 }
 
-// 自动发现 remote_config.json 或优雅回退
+// 自动发现 remote_config.json 或优雅回退 (非本地环境 100% 权威源)
 async function resolveRemoteConfig() {
   if (typeof window === 'undefined' || !window.location) return;
 
-  const isGitHubPages = Boolean(window.location.hostname && window.location.hostname.endsWith('github.io'));
-  const savedApi = (typeof localStorage !== 'undefined' && localStorage.getItem('fleet_api_base')) || '';
-
-  if (isGitHubPages && !savedApi) {
+  if (isNonLocalEnv()) {
     try {
       const res = await window.fetch('./remote_config.json?t=' + Date.now());
       if (res.ok) {
         const cfg = await res.json();
         if (cfg && cfg.apiBase) {
-          API_BASE = cfg.apiBase.replace(/\/+$/, '');
-          console.log('[FleetRadar] 成功从 remote_config.json 获取最新公网隧道 API:', API_BASE);
+          const cleanApi = cfg.apiBase.trim().replace(/\/+$/, '');
+          API_BASE = cleanApi;
+          try {
+            localStorage.setItem('fleet_api_base', cleanApi);
+          } catch {}
+          console.log('[FleetRadar] 权威源同步：已从 remote_config.json 载入最新公网隧道 API (强制覆盖旧缓存与旧书签参数):', API_BASE);
           return;
         }
       }
@@ -640,6 +651,11 @@ async function apiRequest(path, options = {}) {
   }
 }
 
+// 挂载至全局，确保 Chat Terminal 等多模块无缝共享 API_BASE 与鉴权
+if (typeof window !== 'undefined') {
+  window.apiRequest = apiRequest;
+}
+
 // -----------------------------------------------------------------------------
 // 4. 界面本地化与国际化渲染
 // -----------------------------------------------------------------------------
@@ -679,6 +695,38 @@ function toggleLanguage() {
 // -----------------------------------------------------------------------------
 // 5. 核心数据拉取与轮询
 // -----------------------------------------------------------------------------
+let consecutiveFleetFailures = 0;
+let isHotSwitchingTunnel = false;
+
+async function checkAndHotSwitchTunnel() {
+  if (isHotSwitchingTunnel || !isNonLocalEnv()) return false;
+  isHotSwitchingTunnel = true;
+  try {
+    console.warn('[FleetRadar] 轮询连续失败，正在重新拉取 remote_config.json 检查最新隧道地址...');
+    const res = await window.fetch('./remote_config.json?t=' + Date.now());
+    if (res.ok) {
+      const cfg = await res.json();
+      if (cfg && cfg.apiBase) {
+        const newApi = cfg.apiBase.trim().replace(/\/+$/, '');
+        if (newApi && newApi !== API_BASE) {
+          console.log(`[FleetRadar] 🚀 探测到新隧道地址上线！热切换: ${API_BASE} -> ${newApi}`);
+          API_BASE = newApi;
+          try {
+            localStorage.setItem('fleet_api_base', newApi);
+          } catch {}
+          consecutiveFleetFailures = 0;
+          return true;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[FleetRadar] 热切换探测失败:', e.message);
+  } finally {
+    isHotSwitchingTunnel = false;
+  }
+  return false;
+}
+
 async function fetchFleetData(force = false) {
   const refreshBtn = $('refresh-btn');
   if (force) refreshBtn?.classList.add('spinning');
@@ -689,11 +737,31 @@ async function fetchFleetData(force = false) {
     latestFleetData = data;
     renderDashboard(data);
 
+    consecutiveFleetFailures = 0;
+
     // 更新连接状态
     $('connection-dot').className = 'status-dot live';
     $('connection-status').textContent = t('connConnected');
     $('last-updated').textContent = new Date().toLocaleTimeString();
   } catch (err) {
+    consecutiveFleetFailures++;
+    console.warn(`[FleetRadar] fetchFleetData 失败次数: ${consecutiveFleetFailures}`);
+    if (consecutiveFleetFailures >= 2) {
+      const switched = await checkAndHotSwitchTunnel();
+      if (switched) {
+        try {
+          const retryData = await apiRequest(`/api/fleet?range=${currentRange}`);
+          latestFleetData = retryData;
+          renderDashboard(retryData);
+          consecutiveFleetFailures = 0;
+          $('connection-dot').className = 'status-dot live';
+          $('connection-status').textContent = t('connConnected');
+          $('last-updated').textContent = new Date().toLocaleTimeString();
+          return;
+        } catch {}
+      }
+    }
+
     // 若请求失败（如后端正在冷启动或测试模式），使用基于规范的兜底展示数据
     if (!latestFleetData) {
       latestFleetData = getFallbackFleetData();
