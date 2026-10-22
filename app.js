@@ -728,7 +728,8 @@ function renderDashboard(data) {
     const fiveHRemain = recClient.quota?.fiveHour?.remaining ?? 0.9;
     const timeReasonDesc = recClient.timeReason && recClient.timeReason !== '-' ? `【${recClient.timeReason}】` : '';
     const resetDesc = recClient.fiveHourResetText && recClient.fiveHourResetText !== '-' ? `，5h重置倒计时: ${recClient.fiveHourResetText}` : '';
-    $('rec-target-reason').textContent = `${t('fiveHourQuota')}剩余 ${(fiveHRemain * 100).toFixed(0)}%${resetDesc}，周额度健康${timeReasonDesc ? '，' + timeReasonDesc : ''}，综合评分领先，推荐作为本轮任务派发目标。`;
+    const projDesc = recClient.projectedEndRemainingText && recClient.projectedEndRemainingText !== '-' ? `，一周结束前预计剩余: ${recClient.projectedEndRemainingText}` : '';
+    $('rec-target-reason').textContent = `${t('fiveHourQuota')}剩余 ${(fiveHRemain * 100).toFixed(0)}%${resetDesc}${projDesc}，周额度健康${timeReasonDesc ? '，' + timeReasonDesc : ''}，综合评分领先，推荐作为本轮任务派发目标。`;
   }
 
   // 账号池徽章数量更新
@@ -810,7 +811,8 @@ function renderFleetTab(clients) {
               <span class="client-name">${client.name}</span>
               <span class="badge ${roleBadgeClass}">${roleLabel}</span>
               ${client.timeZone === 'urgent-burn' ? `<span class="badge badge-urgent-burn" title="${client.timeReason || '临期重置极速提权'}">🔥 临期优先白嫖</span>` : ''}
-              ${(client.timeBonus && client.timeBonus !== 0) ? `<span class="badge ${client.timeBonus > 0 ? 'badge-time-bonus' : 'badge-time-penalty'}" title="${client.timeReason || ''}">⚡ 时间权重: ${client.timeBonus > 0 ? '+' : ''}${client.timeBonus}分</span>` : ''}
+              ${(client.timeBonus && client.timeBonus !== 0) ? `<span class="badge ${client.timeBonus > 0 ? 'badge-time-bonus' : 'badge-time-penalty'}" title="${client.timeReason || ''}">⚡ 加权: ${client.timeBonus > 0 ? '+' : ''}${client.timeBonus}分</span>` : ''}
+              ${(client.projectedEndRemainingText && client.projectedEndRemainingText !== '-') ? `<span class="badge" style="background:${client.projectedEndRemainingPct >= 30 ? 'rgba(63,185,80,0.15);color:#3fb950;border:1px solid rgba(63,185,80,0.3)' : client.projectedEndRemainingPct >= 15 ? 'rgba(210,153,34,0.15);color:#d29922;border:1px solid rgba(210,153,34,0.3)' : 'rgba(248,81,73,0.15);color:#f85149;border:1px solid rgba(248,81,73,0.3)'};" title="一周结束前预计剩余额度">🔮 周预计结余: ${client.projectedEndRemainingText}</span>` : ''}
               ${(latestFleetData?.dispatchState?.lastDispatch?.targetId === client.id && latestFleetData.dispatchState.lastDispatch.flags?.selfTest) ? '<span class="badge badge-selftest" title="强制自测闭环门禁生效中">🧪 自测门禁中</span>' : ''}
               ${(latestFleetData?.dispatchState?.lastDispatch?.targetId === client.id && latestFleetData.dispatchState.lastDispatch.flags?.reviewClient) ? '<span class="badge badge-review" title="交叉审查门禁生效中">👥 交叉审查中</span>' : ''}
               ${client.pid ? `<span class="badge" style="background:var(--bg-input);color:var(--text-subtle);">PID: ${client.pid}</span>` : ''}
