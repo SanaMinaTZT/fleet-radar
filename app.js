@@ -72,6 +72,7 @@ function renderDispatchBannerHtml(lastDispatch) {
 }
 
 let lastSyncedFlagsTimestamp = null;
+let lastUserFlagInteractionMs = 0;
 
 function showFlagsSyncBadge(text) {
   let badge = $('flags-sync-badge');
@@ -114,6 +115,7 @@ function syncDispatchFlagsFromState(activeFlags, force = false) {
 }
 
 async function pushActiveFlagsToServer() {
+  lastUserFlagInteractionMs = Date.now();
   const flags = {
     forceNew: $('dispatch-opt-force-new')?.checked || false,
     smartNew: $('smartNew')?.checked || false,
@@ -126,7 +128,11 @@ async function pushActiveFlagsToServer() {
       method: 'POST',
       body: JSON.stringify(flags)
     });
-    lastSyncedFlagsTimestamp = new Date().toISOString();
+    if (res && res.updatedAt) {
+      lastSyncedFlagsTimestamp = res.updatedAt;
+    } else {
+      lastSyncedFlagsTimestamp = new Date().toISOString();
+    }
     showFlagsSyncBadge('🔄 已同步最新全局状态');
     return res;
   } catch (e) {
@@ -197,13 +203,20 @@ function renderDispatchStateSync(dispatchState) {
 
   // 多端与跨会话开关同步：检测服务端版本戳是否变更
   const serverUpdatedAt = dispatchState.updatedAt;
-  if (serverUpdatedAt && serverUpdatedAt !== lastSyncedFlagsTimestamp) {
-    syncDispatchFlagsFromState(dispatchState.activeFlags, true);
-    lastSyncedFlagsTimestamp = serverUpdatedAt;
-    showFlagsSyncBadge('🔄 已从主控同步全局开关');
-  } else if (!lastSyncedFlagsTimestamp) {
-    syncDispatchFlagsFromState(dispatchState.activeFlags, true);
-    lastSyncedFlagsTimestamp = serverUpdatedAt || new Date().toISOString();
+  const isUserInteracting = (Date.now() - lastUserFlagInteractionMs) < 6000;
+
+  if (!isUserInteracting && dispatchState.activeFlags) {
+    const serverTime = serverUpdatedAt ? Date.parse(serverUpdatedAt) : 0;
+    const localTime = lastSyncedFlagsTimestamp ? Date.parse(lastSyncedFlagsTimestamp) : 0;
+
+    if (serverTime > localTime) {
+      syncDispatchFlagsFromState(dispatchState.activeFlags, true);
+      lastSyncedFlagsTimestamp = serverUpdatedAt;
+      showFlagsSyncBadge('🔄 已从主控同步全局开关');
+    } else if (!lastSyncedFlagsTimestamp && serverUpdatedAt) {
+      syncDispatchFlagsFromState(dispatchState.activeFlags, true);
+      lastSyncedFlagsTimestamp = serverUpdatedAt;
+    }
   }
 
   renderDispatchHistoryTable(dispatchState.history);
@@ -475,12 +488,30 @@ function formatCountdown(sec) {
 }
 
 // -----------------------------------------------------------------------------
-// 3. 通信与 API 封装 (兼容 Sidecar SDK 与独立 HTTP 模式)
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
 // 3. 通信与 API 封装 (兼容 Sidecar SDK、GitHub Pages 跨域与独立 HTTP 模式)
 // -----------------------------------------------------------------------------
 let API_BASE = '';
+
+function resolveApiBase() {
+  if (typeof window === 'undefined' || !window.location) return 'http://127.0.0.1:17892';
+
+  const savedApi = (typeof localStorage !== 'undefined' && localStorage.getItem('fleet_api_base')) || '';
+  if (savedApi) return savedApi.trim().replace(/\/+$/, '');
+
+  const hostname = window.location.hostname || '';
+
+  // 如果处于公网 HTTPS 托管环境（如 GitHub Pages 或 Cloudflare 隧道）
+  const isPublicWeb = hostname.endsWith('github.io') || hostname.includes('trycloudflare.com');
+  if (isPublicWeb) {
+    if (window.location.origin && window.location.origin !== 'null' && !hostname.endsWith('github.io')) {
+      return window.location.origin.replace(/\/+$/, '');
+    }
+    return ''; // GitHub Pages 默认等待 resolveRemoteConfig 载入 remote_config.json
+  }
+
+  // 本地环境（包括 Antigravity 内嵌控制面板 plugin://、vscode-webview://、localhost、127.0.0.1 等），一律优先统一指向 127.0.0.1:17892！
+  return 'http://127.0.0.1:17892';
+}
 
 function initRemoteAccessConfig() {
   try {
@@ -507,19 +538,7 @@ function initRemoteAccessConfig() {
     console.warn('[FleetRadar] 解析 URL 参数失败:', e);
   }
 
-  try {
-    const savedApi = (typeof localStorage !== 'undefined' && localStorage.getItem('fleet_api_base')) || '';
-    if (savedApi) {
-      API_BASE = savedApi;
-    } else if (typeof window !== 'undefined' && window.location) {
-      const hostname = window.location.hostname || '';
-      if (!hostname.endsWith('github.io')) {
-        API_BASE = window.location.origin && window.location.origin !== 'null' ? window.location.origin : 'http://127.0.0.1:17892';
-      }
-    }
-  } catch (e) {
-    API_BASE = 'http://127.0.0.1:17892';
-  }
+  API_BASE = resolveApiBase();
 }
 
 // 自动发现 remote_config.json 或优雅回退
@@ -546,13 +565,7 @@ async function resolveRemoteConfig() {
   }
 
   if (!API_BASE) {
-    if (savedApi) {
-      API_BASE = savedApi;
-    } else if (window.location.origin && window.location.origin !== 'null' && !isGitHubPages) {
-      API_BASE = window.location.origin;
-    } else {
-      API_BASE = 'http://127.0.0.1:17892';
-    }
+    API_BASE = resolveApiBase() || 'http://127.0.0.1:17892';
   }
 }
 
@@ -560,18 +573,16 @@ async function resolveRemoteConfig() {
 initRemoteAccessConfig();
 
 async function apiRequest(path, options = {}) {
-  const host = window.sidecar;
-  const isSidecarHost = Boolean(host?.fetch);
-  const transport = isSidecarHost ? host.fetch.bind(host) : window.fetch.bind(window);
-
   // 动态寻址全路径
   let fullUrl = path;
-  if (!isSidecarHost) {
-    if (!path.startsWith('http://') && !path.startsWith('https://')) {
-      const base = API_BASE ? API_BASE.replace(/\/+$/, '') : '';
-      fullUrl = base ? (base + (path.startsWith('/') ? '' : '/') + path) : path;
-    }
+  if (!path.startsWith('http://') && !path.startsWith('https://')) {
+    const base = API_BASE ? API_BASE.replace(/\/+$/, '') : '';
+    fullUrl = base ? (base + (path.startsWith('/') ? '' : '/') + path) : path;
   }
+
+  const transport = (typeof window !== 'undefined' && window.fetch)
+    ? window.fetch.bind(window)
+    : (window.sidecar?.fetch ? window.sidecar.fetch.bind(window.sidecar) : fetch);
 
   const accessKey = (typeof localStorage !== 'undefined' && localStorage.getItem('fleet_access_key')) || '';
   const headers = {
