@@ -14,6 +14,7 @@ function renderDispatchBannerHtml(lastDispatch) {
   const isAutoSplit = lastDispatch.flags?.autoSplit;
   const isSelfTest = lastDispatch.flags?.selfTest;
   const isSmartNew = lastDispatch.flags?.smartNew;
+  const isOverdraftProtect = lastDispatch.flags?.overdraftProtect;
   const reviewClient = lastDispatch.flags?.reviewClient;
   const scaleTier = lastDispatch.scaleTier || 'Tier S/M';
   const tierClass = scaleTier.includes('L/XL') ? 'badge-tier-large' : 'badge-tier-small';
@@ -30,6 +31,11 @@ function renderDispatchBannerHtml(lastDispatch) {
   if (isAutoSplit) {
     const splitTip = lastDispatch.scaleReason ? `依据: ${escapeHtml(lastDispatch.scaleReason)}` : '大型多模块自动正交拆分';
     badgesHtml += `<span class="badge badge-autosplit" title="${splitTip}">📐 智能拆分 (AutoSplit: ON)</span>`;
+  }
+  if (isOverdraftProtect === false) {
+    badgesHtml += '<span class="badge badge-warning" title="周透支节点保护已关闭，允许满血调动">⚡ 透支放开 (Overdraft: OFF)</span>';
+  } else if (isOverdraftProtect === true) {
+    badgesHtml += '<span class="badge badge-shield" title="周透支节点保护已开启">🛡️ 透支保护 (Overdraft: ON)</span>';
   }
   if (reviewClient) {
     badgesHtml += `<span class="badge badge-review" title="指定交叉代码审查节点">👥 交叉审查 (Review: ${escapeHtml(reviewClient)})</span>`;
@@ -102,12 +108,14 @@ function syncDispatchFlagsFromState(activeFlags, force = false) {
   const forceNewEl = $('dispatch-opt-force-new');
   const smartNewEl = $('smartNew');
   const autoSplitEl = $('autoSplit');
+  const overdraftProtectEl = $('overdraftProtect');
   const selfTestEl = $('dispatch-opt-self-test');
   const peerReviewEl = $('dispatch-opt-peer-review');
 
   if (forceNewEl && typeof activeFlags.forceNew === 'boolean') forceNewEl.checked = activeFlags.forceNew;
   if (smartNewEl && typeof activeFlags.smartNew === 'boolean') smartNewEl.checked = activeFlags.smartNew;
   if (autoSplitEl && typeof activeFlags.autoSplit === 'boolean') autoSplitEl.checked = activeFlags.autoSplit;
+  if (overdraftProtectEl && typeof activeFlags.overdraftProtect === 'boolean') overdraftProtectEl.checked = activeFlags.overdraftProtect;
   if (selfTestEl && typeof activeFlags.selfTest === 'boolean') selfTestEl.checked = activeFlags.selfTest;
   if (peerReviewEl && typeof activeFlags.reviewClient !== 'undefined') {
     peerReviewEl.checked = Boolean(activeFlags.reviewClient);
@@ -120,6 +128,7 @@ async function pushActiveFlagsToServer() {
     forceNew: $('dispatch-opt-force-new')?.checked || false,
     smartNew: $('smartNew')?.checked || false,
     autoSplit: $('autoSplit')?.checked || false,
+    overdraftProtect: $('overdraftProtect') ? $('overdraftProtect').checked : true,
     selfTest: $('dispatch-opt-self-test')?.checked || false,
     reviewClient: $('dispatch-opt-peer-review')?.checked ? 'auto' : ''
   };
@@ -155,6 +164,8 @@ function renderDispatchHistoryTable(history) {
     if (item.flags?.selfTest) badges.push('<span class="tag-badge green">🧪 自测</span>');
     if (item.flags?.smartNew) badges.push('<span class="tag-badge blue">🧠 新窗</span>');
     if (item.flags?.autoSplit) badges.push('<span class="tag-badge purple">📐 拆分</span>');
+    if (item.flags?.overdraftProtect === false) badges.push('<span class="tag-badge red">⚡ 透支放开</span>');
+    else if (item.flags?.overdraftProtect === true) badges.push('<span class="tag-badge green">🛡️ 透支保护</span>');
     if (item.flags?.reviewClient) badges.push(`<span class="tag-badge orange">👥 审查:${item.flags.reviewClient}</span>`);
     const badgesHtml = badges.length > 0 ? badges.join(' ') : '<span class="text-muted text-xs">默认直出</span>';
 
@@ -292,6 +303,7 @@ const I18N = {
     optForceNew: '强制新建会话窗口 (忽略绑定，开新对话)',
     optSmartNew: '🧠 智能新建会话窗口 (检测到新话题/新项目或旧会话超载时，自动在 Pro 中开新窗口)',
     optAutoSplit: '📐 开启智能规模评估与自动多机拆分 (Auto-Scale & Split)',
+    optOverdraftProtect: '🛡️ 开启周透支节点保护（暂停调动预计周结余为负的节点，关闭则可继续满血使用）',
     optCallback: '任务完成自动回调通知 0号 Ultra 主控 (带完成回调推送)',
       optSelfTest: '开启强制自测闭环 (Self-Test Gate) - 要求编写/运行自测脚本验证通过方可交付',
       optPeerReview: '开启双机交叉审查 (Cross-Client Peer Review) - 由第二空闲节点复核代码质量',
@@ -394,6 +406,7 @@ const I18N = {
     optForceNew: 'Force new conversation window (Ignore bound session)',
     optSmartNew: '🧠 Smart new window (Auto-creates new window on topic shift / context overload)',
     optAutoSplit: '📐 Enable Auto Task Scale Evaluation & Multi-Client Split',
+    optOverdraftProtect: '🛡️ Enable Weekly Overdraft Protection (Pause dispatching negative projected weekly remaining nodes)',
     optCallback: 'Auto-callback report to 0 Ultra master upon task completion',
     btnSendDispatch: '🚀 Dispatch Task Now',
     dispatchNotice: 'Silent Dispatch Rule: Workers report progress every 2m and callback upon completion.',
@@ -1397,6 +1410,7 @@ async function handleDispatchSubmit() {
   const forceNew = Boolean($('dispatch-opt-force-new')?.checked);
   const smartNew = Boolean($('smartNew')?.checked);
   const autoSplit = Boolean($('autoSplit')?.checked);
+  const overdraftProtect = $('overdraftProtect') ? Boolean($('overdraftProtect').checked) : true;
   const callbackUltra = Boolean($('dispatch-opt-callback')?.checked);
   const selfTest = Boolean($('dispatch-opt-self-test')?.checked);
   const reviewClient = $('dispatch-opt-peer-review')?.checked ? 'auto' : '';
@@ -1409,7 +1423,7 @@ async function handleDispatchSubmit() {
   try {
     const res = await apiRequest('/api/dispatch', {
       method: 'POST',
-      body: JSON.stringify({ target, prompt, forceNew, smartNew, autoSplit, callbackUltra, selfTest, reviewClient })
+      body: JSON.stringify({ target, prompt, forceNew, smartNew, autoSplit, overdraftProtect, callbackUltra, selfTest, reviewClient })
     });
 
     // 渲染结果
@@ -1564,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     'dispatch-opt-force-new',
     'smartNew',
     'autoSplit',
+    'overdraftProtect',
     'dispatch-opt-self-test',
     'dispatch-opt-peer-review'
   ];
