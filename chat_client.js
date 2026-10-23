@@ -295,6 +295,16 @@
     try {
       const data = await apiRequest(`/api/chat/list?client=${clientId}`);
       const sessions = data?.sessions || [];
+      if (activeCascadeId && !sessions.find(s => s.cascadeId === activeCascadeId)) {
+        sessions.unshift({
+          cascadeId: activeCascadeId,
+          title: '新会话 (处理中...)',
+          updatedAt: new Date().toISOString(),
+          stepCount: 1,
+          isRunning: true,
+          lastPreview: '新会话正在启动...'
+        });
+      }
       chatSessionsCache = sessions;
 
       if (sessions.length === 0) {
@@ -338,7 +348,7 @@
     }
   }
 
-  function selectChatSession(cascadeId, title) {
+  function selectChatSession(cascadeId, title, triggerDesktopSwitch = true) {
     activeCascadeId = cascadeId;
     $('chat-sidebar')?.classList.remove('mobile-open');
 
@@ -369,6 +379,15 @@
     }
 
     loadChatMessages(activeChatClient, cascadeId);
+
+    // 联动触发桌面客户端窗口切入该会话
+    if (triggerDesktopSwitch && cascadeId && /^[0-9a-fA-F-]{36}$/.test(cascadeId)) {
+      const apiRequest = getApiRequest();
+      apiRequest('/api/client/switch-ui', {
+        method: 'POST',
+        body: JSON.stringify({ target: activeChatClient, cascadeId })
+      }).catch(() => {});
+    }
   }
 
   function startNewChatSession() {
@@ -433,6 +452,10 @@
       }
 
       if (messages.length === 0) {
+        if (container.querySelector('.user-row')) {
+          // 保留刚刚乐观插入的用户提问气泡，防止消息流未建立时被冲刷
+          return;
+        }
         container.innerHTML = '<div class="chat-empty-hint">暂无对话内容</div>';
         return;
       }
@@ -547,9 +570,20 @@
       if (res?.success) {
         if (res.cascadeId && res.cascadeId !== activeCascadeId) {
           activeCascadeId = res.cascadeId;
-          // 刷新列表并选定新会话
+          // 乐观添加新会话记录至前端缓存
+          if (!chatSessionsCache.find(s => s.cascadeId === activeCascadeId)) {
+            chatSessionsCache.unshift({
+              cascadeId: activeCascadeId,
+              title: prompt.substring(0, 30),
+              updatedAt: new Date().toISOString(),
+              stepCount: 1,
+              isRunning: true,
+              lastPreview: prompt.substring(0, 60)
+            });
+          }
+          // 刷新列表并选定新会话 (无需再次触发桌面切换，后端 dispatch 时已自动切入)
           await loadChatSessions(activeChatClient, false);
-          selectChatSession(activeCascadeId, prompt.substring(0, 30));
+          selectChatSession(activeCascadeId, prompt.substring(0, 30), false);
         } else {
           // 等待 1.5 秒后拉取最新更新
           setTimeout(() => {
@@ -589,4 +623,10 @@
   window.renderChatClientCapsules = renderChatClientCapsules;
   window.startChatPolling = startChatPolling;
   window.stopChatPolling = stopChatPolling;
+  window.selectChatSession = selectChatSession;
+  window.switchChatClient = (clientId) => {
+    activeChatClient = clientId;
+    loadClientModels(clientId);
+    loadChatSessions(clientId, true);
+  };
 })();

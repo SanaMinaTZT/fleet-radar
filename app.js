@@ -1547,6 +1547,33 @@ async function handleDispatchSubmit() {
       $('dispatch-res-target').textContent = res.target || target;
       $('dispatch-res-cascade-id').textContent = res.cascadeId || '已异步派发';
       $('dispatch-res-reason').textContent = res.reason || res.targetReason || (mode === 'auto' ? '由 AI 额度负载均衡引擎自动分配' : '手动勾选派发');
+
+      // 联动触发桌面客户端切屏 (防漏)
+      if (res.cascadeId && res.target && /^[0-9a-fA-F-]{36}$/.test(res.cascadeId)) {
+        apiRequest('/api/client/switch-ui', {
+          method: 'POST',
+          body: JSON.stringify({ target: res.target, cascadeId: res.cascadeId })
+        }).catch(() => {});
+      }
+    }
+
+    const jumpBtn = $('dispatch-btn-jump-chat');
+    if (jumpBtn) {
+      if (res.cascadeId && res.target) {
+        jumpBtn.style.display = 'inline-flex';
+        jumpBtn.onclick = () => {
+          const chatTabBtn = document.querySelector('.nav-tab[data-tab="pane-chat"]');
+          if (chatTabBtn) chatTabBtn.click();
+          if (window.switchChatClient) {
+            window.switchChatClient(res.target);
+          }
+          if (window.selectChatSession) {
+            window.selectChatSession(res.cascadeId, prompt.substring(0, 30));
+          }
+        };
+      } else {
+        jumpBtn.style.display = 'none';
+      }
     }
 
     // 触发刷新
